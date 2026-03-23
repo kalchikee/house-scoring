@@ -22,10 +22,10 @@ export default function CrimeDetailPanel({ crimeDetail, score }) {
 
   const rate = crimeDetail.rate ?? 0;
   const comparison = compareToNational(rate);
-  const label = getCrimeLabel(score);
   const color = getScoreColor(score);
-  const { breakdown, source, details } = crimeDetail;
+  const { breakdown, source, details, agencyName } = crimeDetail;
   const stateAbbr = details?.state ?? '??';
+  const cityLabel = details?.city ?? stateAbbr;
 
   const nationalBar = Math.min(100, (NATIONAL_AVG_RATE / 1000) * 100);
   const localBar = Math.min(100, (rate / 1000) * 100);
@@ -37,22 +37,30 @@ export default function CrimeDetailPanel({ crimeDetail, score }) {
       <div>
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-medium text-slate-400">Violent Crime Rate (per 100k)</span>
+          {source === 'city' && (
+            <span className="text-xs px-1.5 py-0.5 bg-green-500/10 text-green-400 rounded border border-green-500/20">
+              City-level · {breakdown?.year ?? ''}
+            </span>
+          )}
+          {source === 'state' && (
+            <span className="text-xs px-1.5 py-0.5 bg-blue-500/10 text-blue-400 rounded border border-blue-500/20">
+              State estimate · {breakdown?.year ?? ''}
+            </span>
+          )}
           {source === 'fallback' && (
             <span className="text-xs px-1.5 py-0.5 bg-yellow-500/10 text-yellow-400 rounded border border-yellow-500/20">
               Historical avg
-            </span>
-          )}
-          {source === 'api' && (
-            <span className="text-xs px-1.5 py-0.5 bg-green-500/10 text-green-400 rounded border border-green-500/20">
-              FBI {breakdown?.year ?? ''}
             </span>
           )}
         </div>
 
         {/* Local vs national bars */}
         <div className="space-y-2">
+          {agencyName && (
+            <p className="text-xs text-slate-500 mb-1.5">Agency: {agencyName}</p>
+          )}
           <div className="flex items-center gap-2 text-xs">
-            <span className="w-20 text-slate-400 flex-shrink-0">{stateAbbr}</span>
+            <span className="w-20 text-slate-400 flex-shrink-0 truncate" title={cityLabel}>{cityLabel}</span>
             <div className="flex-1 h-2.5 bg-slate-700/60 rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-700"

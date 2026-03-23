@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import useAppStore from '../store/useAppStore';
-import { geocodeAddress, getStateAbbr } from '../api/geocoding';
+import { geocodeAddress, getStateAbbr, getCityName } from '../api/geocoding';
 import { fetchWalkScore } from '../api/walkScore';
 import { fetchCrimeScore } from '../api/crime';
 import { findNearestTraderJoes, proximityScore } from '../api/places';
@@ -62,11 +62,12 @@ export default function AddressSearch({ compact = false }) {
 
     try {
       const stateAbbr = getStateAbbr(nominatimAddr);
+      const cityName  = getCityName(nominatimAddr);
 
       // Run all API calls in parallel
       const [walkResult, crimeResult, tjResult] = await Promise.all([
         fetchWalkScore(address, lat, lon, nominatimAddr),
-        fetchCrimeScore(stateAbbr),
+        fetchCrimeScore(stateAbbr, cityName),
         findNearestTraderJoes(lat, lon),
       ]);
 

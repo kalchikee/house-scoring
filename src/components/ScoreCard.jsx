@@ -185,10 +185,12 @@ export default function ScoreCard() {
             score={scores.crime}
             detail={[
               crimeDetail?.rate && `${crimeDetail.rate.toLocaleString()}/100k violent`,
-              crimeDetail?.details?.state && `State: ${crimeDetail.details.state}`,
+              crimeDetail?.source === 'city' && crimeDetail?.details?.city
+                ? `City: ${crimeDetail.details.city}`
+                : crimeDetail?.details?.state && `State: ${crimeDetail.details.state}`,
               crimeDetail?.score && getCrimeLabel(crimeDetail.score),
             ].filter(Boolean).join(' · ')}
-            source={crimeDetail?.source}
+            source={crimeDetail?.source === 'city' ? 'api' : crimeDetail?.source}
             warning={crimeDetail?.source === 'fallback' ? 'Using historical state average — FBI API unavailable' : null}
             onClick={() => setCrimeExpanded(v => !v)}
             expanded={crimeExpanded}

@@ -66,6 +66,22 @@ export async function reverseGeocode(lat, lon) {
 }
 
 /**
+ * Extract the city name from a Nominatim address object.
+ * Tries city → town → village → municipality → county as fallback.
+ */
+export function getCityName(nominatimAddress) {
+  if (!nominatimAddress) return null;
+  return (
+    nominatimAddress.city ||
+    nominatimAddress.town ||
+    nominatimAddress.village ||
+    nominatimAddress.municipality ||
+    nominatimAddress.county ||
+    null
+  );
+}
+
+/**
  * Extract US state abbreviation from a Nominatim address object.
  */
 export function getStateAbbr(nominatimAddress) {
