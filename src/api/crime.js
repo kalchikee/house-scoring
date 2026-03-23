@@ -1,95 +1,102 @@
 /**
- * FBI Crime Data Explorer API.
- * Endpoint works client-side (no CORS issues).
- * Fetches state-level violent crime summary data.
+ * FBI Crime Data Explorer API — state-level estimated crime rates.
+ * Uses the /estimate/state/ endpoint which returns clean per-state totals.
+ * No CORS issues — this endpoint works client-side.
  */
 
 const FBI_BASE = 'https://api.usa.gov/crime/fbi/cde';
 const FBI_API_KEY = import.meta.env.VITE_FBI_API_KEY || 'iiHnOKfno2Mgkt5AynpvPpUQTEyxE27b2BNYyxfmTn4';
 
-// National average violent crime rate per 100k (FBI, ~2019-2022 avg)
+// National average violent crime rate per 100k (FBI ~2020-2022)
 const NATIONAL_AVG_RATE = 380;
 
 /**
- * Fetch state-level violent crime data.
+ * Fetch state-level estimated violent crime data.
  * @param {string} stateAbbr - e.g. 'IL', 'CA'
- * @returns {Promise<{rate: number, score: number, details: object}>}
+ * @returns {Promise<object>} score + detail breakdown
  */
 export async function fetchCrimeScore(stateAbbr) {
   if (!stateAbbr) {
-    return { rate: NATIONAL_AVG_RATE, score: 50, details: null, source: 'default' };
+    return buildResult(NATIONAL_AVG_RATE, 'default', null, stateAbbr);
   }
 
   try {
-    const url = `${FBI_BASE}/summarized/agency/byStateAbbr/${stateAbbr}?API_KEY=${FBI_API_KEY}&from=2019&to=2022`;
+    // The estimate endpoint returns state-level totals — much easier to parse
+    const url = `${FBI_BASE}/estimate/state/${stateAbbr}?API_KEY=${FBI_API_KEY}&from=2019&to=2022`;
     const res = await fetch(url);
 
-    if (!res.ok) throw new Error(`FBI API error: ${res.status}`);
+    if (!res.ok) throw new Error(`FBI API ${res.status}`);
+
     const data = await res.json();
+    const rows = Array.isArray(data) ? data : (data?.data ?? []);
 
-    // data is an array of agency records with offense counts
-    // Sum all violent crime offenses and get estimated population
-    const violentOffenseTypes = ['violent-crime', 'aggravated-assault', 'robbery', 'rape', 'murder'];
+    if (!rows.length) throw new Error('No data returned');
 
-    let totalViolent = 0;
-    let totalPopulation = 0;
-    let recordCount = 0;
+    // Use the most recent year with both violent_crime and population
+    const valid = rows
+      .filter((r) => r.violent_crime > 0 && r.population > 0)
+      .sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
 
-    if (Array.isArray(data)) {
-      data.forEach((record) => {
-        const offense = (record.offense || '').toLowerCase();
-        if (violentOffenseTypes.some((t) => offense.includes(t.replace('-', ' ')))) {
-          totalViolent += record.actual || 0;
-        }
-        if (record.population > 0) {
-          totalPopulation = Math.max(totalPopulation, record.population);
-        }
-        recordCount++;
-      });
-    }
+    if (!valid.length) throw new Error('No usable rows');
 
-    // If we couldn't extract meaningful data, fall back
-    if (totalPopulation === 0 || totalViolent === 0) {
-      // Use a state-level lookup fallback
-      const fallbackRate = STATE_CRIME_FALLBACK[stateAbbr] || NATIONAL_AVG_RATE;
-      const score = Math.max(0, Math.min(100, Math.round(100 - (fallbackRate / 8))));
-      return {
-        rate: fallbackRate,
-        score,
-        source: 'fallback',
-        details: { state: stateAbbr, note: 'Using historical average' },
-      };
-    }
+    const row = valid[0];
+    const rate = (row.violent_crime / row.population) * 100_000;
 
-    const ratePerHundredK = (totalViolent / totalPopulation) * 100000;
-    // Score formula: 100 - (rate / 8), clamped 0-100
-    const score = Math.max(0, Math.min(100, Math.round(100 - (ratePerHundredK / 8))));
-
-    return {
-      rate: Math.round(ratePerHundredK),
-      score,
-      source: 'api',
-      details: {
-        state: stateAbbr,
-        totalViolent,
-        population: totalPopulation,
-        records: recordCount,
-      },
+    const breakdown = {
+      year: row.year,
+      homicide: row.homicide ?? row.murder ?? null,
+      rape: row.rape_revised ?? row.rape_legacy ?? row.rape ?? null,
+      robbery: row.robbery ?? null,
+      assault: row.aggravated_assault ?? row.agg_assault ?? null,
+      violentTotal: row.violent_crime,
+      propertyTotal: row.property_crime ?? null,
+      population: row.population,
     };
+
+    return buildResult(rate, 'api', breakdown, stateAbbr);
   } catch (err) {
-    const fallbackRate = STATE_CRIME_FALLBACK[stateAbbr] || NATIONAL_AVG_RATE;
-    const score = Math.max(0, Math.min(100, Math.round(100 - (fallbackRate / 8))));
-    return {
-      rate: fallbackRate,
-      score,
-      source: 'fallback',
-      error: err.message,
-      details: { state: stateAbbr },
-    };
+    console.warn('FBI API error, using fallback:', err.message);
+    const fallbackRate = STATE_CRIME_FALLBACK[stateAbbr] ?? NATIONAL_AVG_RATE;
+    return buildResult(fallbackRate, 'fallback', null, stateAbbr);
   }
 }
 
-// State-level violent crime fallback rates (per 100k, ~2020-2022 FBI estimates)
+function buildResult(ratePerHundredK, source, breakdown, stateAbbr) {
+  const score = Math.max(0, Math.min(100, Math.round(100 - ratePerHundredK / 8)));
+  return {
+    rate: Math.round(ratePerHundredK),
+    score,
+    source,
+    breakdown,
+    details: { state: stateAbbr },
+  };
+}
+
+/**
+ * Contextual label for a crime score.
+ */
+export function getCrimeLabel(score) {
+  if (score >= 85) return 'Very Safe';
+  if (score >= 70) return 'Safe';
+  if (score >= 55) return 'Average';
+  if (score >= 40) return 'Elevated Risk';
+  return 'High Crime';
+}
+
+/**
+ * Compare a rate to the national average.
+ */
+export function compareToNational(rate) {
+  const diff = rate - NATIONAL_AVG_RATE;
+  const pct = Math.abs(Math.round((diff / NATIONAL_AVG_RATE) * 100));
+  if (diff <= -50) return { text: `${pct}% below national average`, positive: true };
+  if (diff <= 50)  return { text: 'Near national average', positive: null };
+  return { text: `${pct}% above national average`, positive: false };
+}
+
+export { NATIONAL_AVG_RATE };
+
+// State-level fallback violent crime rates per 100k (~2020-2022 FBI estimates)
 const STATE_CRIME_FALLBACK = {
   AL: 490, AK: 837, AZ: 480, AR: 550, CA: 440,
   CO: 400, CT: 200, DE: 400, FL: 385, GA: 340,

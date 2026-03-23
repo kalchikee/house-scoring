@@ -109,12 +109,12 @@ export default function MapView({ fullscreen }) {
           </Marker>
         )}
 
-        {/* Trader Joe's pin */}
+        {/* Nearest grocery pin */}
         {traderJoes?.found && traderJoes.lat && traderJoes.lon && (
           <Marker position={[traderJoes.lat, traderJoes.lon]} icon={tjIcon}>
             <Popup>
               <div className="text-slate-900 p-1">
-                <div className="font-bold text-sm mb-1">{traderJoes.name || "Trader Joe's"}</div>
+                <div className="font-bold text-sm mb-1">{traderJoes.name || 'Grocery Store'}</div>
                 <div className="text-xs text-slate-600 mb-1">{traderJoes.address}</div>
                 <div className="text-xs text-slate-500">
                   {traderJoes.distance?.toFixed(1)} miles away
